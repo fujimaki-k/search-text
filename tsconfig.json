@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "allowJs": false,
+        "alwaysStrict": true,
+        "baseUrl": "./",
+        "charset": "utf8",
+        "lib": ["dom", "es2016"],
+        "module": "CommonJS",
+        "moduleResolution": "node",
+        "noImplicitAny": true,
+        "noUnusedLocals": true,
+        "preserveConstEnums": true,
+        "pretty": true,
+        "removeComments": false,
+        "sourceMap": true,
+        "target": "ES2016"
+    },
+    "exclude": ["node_modules"],
+    "include": ["**/*"]
+}
+
