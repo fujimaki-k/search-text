@@ -8,7 +8,6 @@
 import URL = require("url");
 import Client from "./client";
 import Document from "./document";
-import Queue from "./queue";
 import {MatchingOptions} from "./document";
 
 const rewritePattern = require("regexpu-core");
@@ -34,7 +33,7 @@ declare interface Message {
 
 
 class Search {
-    public queue: Queue;
+    public queue: Array<Message> = [];
     public map: {[index: string]: boolean} = {};
     public domains: {[index: string]: boolean} = {};
     public url: string;
@@ -46,7 +45,6 @@ class Search {
      * @constructs Search
      */
     constructor(url: string, options?: Options) {
-        this.queue = new Queue();
         this.url = url;
         this.options = options || {};
         this.options.depth = this.options.depth || 0;
@@ -137,15 +135,16 @@ class Search {
             }
 
             const links =  document.getLinks(message.url);
-            links.forEach((link: string) => {
+            links.push.apply(this.queue, links.map((link: string): Message => {
                 const stack = message.stack.slice();
                 stack.push(link);
-                this.queue.push({
+
+                return {
                     url: link,
                     step: message.step + 1,
                     stack: stack
-                });
-            });
+                };
+            }));
 
             if (this.options.wait > 0) {
                 await this.sleep(this.options.wait);
