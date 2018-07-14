@@ -15,7 +15,9 @@
         "build:dev": "tsc",
         "cobertura": "istanbul cover --report cobertura _mocha ./test",
         "coverage": "istanbul cover --report html _mocha ./test",
+        "help": "npm run build && node index.js --help",
         "postinstall": "npm run build",
+        "search": "npm run build && node index.js --",
         "test": "npm run build:dev && _mocha ./test"
     },
     "dependencies": {

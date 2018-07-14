@@ -4,42 +4,84 @@
 'use strict';
 
 
-// Configuration
-/*
-const url = "https://127.0.0.1:8000";
-const word = "printemps";
-*/
-
 
 // Import modules
-import superagent = require("superagent");
-// import cheerio = require("cheerio");
-// import Queue from "./lib/queue"
+import path = require("path");
+import Argparse = require("argparse");
+import Search from "./lib/search";
 
-
-// Declaration
-const get = function (url: string) {
-    return new Promise((resolve, reject) => {
-        superagent.get(url).end((error, result) => {
-            if (error) {
-                reject(error);
-            } else {
-                resolve(result);
-            }
-        });
-    });
-};
 
 // Variables
-// const searched: {[index: string]: boolean} = {};
+const meta = require(path.resolve(__dirname, "package.json"));
+
+
+// Argument parser
+const parser = new Argparse.ArgumentParser({
+    version: meta.version,
+    description: meta.description
+});
+parser.addArgument(["-i", "--ignore-case"], {
+    action: "storeConst",
+    constant: true,
+    defaultValue: false,
+    help: "Ignore case"
+});
+parser.addArgument(["-m", "--multiline"], {
+    action: "storeConst",
+    constant: true,
+    defaultValue: false,
+    help: "Enable multiline matching"
+});
+parser.addArgument(["-n", "--normalize"], {
+    action: "storeConst",
+    constant: true,
+    defaultValue: false,
+    help: "Normalize word and document before matching"
+});
+parser.addArgument(["-w", "--wait"], {
+    action: "store",
+    defaultValue: 0,
+    help: "Wait time before HTTP request"
+});
+parser.addArgument(["-d", "--depth"], {
+    action: "store",
+    defaultValue: 0,
+    help: "Max depth of documents"
+});
+parser.addArgument(["-a", "--allow-domain"], {
+    action: "append",
+    defaultValue: [],
+    help: "Domain list of allow accessing"
+});
+parser.addArgument("url", {help: "Base URL"});
+parser.addArgument("word", {help: "Search word"});
+const config = parser.parseArgs();
 
 
 // Execute
 (async () => {
+    const search = new Search(config.url, {
+        depth: config.depth,
+        domains: config.domains,
+        normalize: config.normalize,
+        wait: config.wait
+    });
 
-    const test = await get("http://localhost:8000/");
-    console.log(test);
+    const result = await search.search(config.word, {
+        ignoreCase: config.ignore_case,
+        multiline: config.multiline
+    });
 
+    if (result) {
+        console.log(`Steps: ${result.step}`);
+        console.log("Path:");
+        result.stack.forEach((path: string, index: number) => {
+            console.log(`\t${index + 1}: ${path}`);
+        });
+    } else {
+        console.error("Not found");
+        process.exit(100);
+    }
 })();
 
 

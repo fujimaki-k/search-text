@@ -64,3 +64,7 @@ typings/
 *.js
 *.js.map
 
+# IntelliJ IDEA
+.idea
+*.iml
+
