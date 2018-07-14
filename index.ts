@@ -5,17 +5,17 @@
 
 
 
-// Import modules
+// 必要なモジュールのインポート
 import path = require("path");
 import Argparse = require("argparse");
 import Search from "./lib/search";
 
 
-// Variables
+// 変数の宣言
 const meta = require(path.resolve(__dirname, "package.json"));
 
 
-// Argument parser
+// コマンドライン引数をパースする
 const parser = new Argparse.ArgumentParser({
     version: meta.version,
     description: meta.description
@@ -24,37 +24,37 @@ parser.addArgument(["-i", "--ignore-case"], {
     action: "storeConst",
     constant: true,
     defaultValue: false,
-    help: "Ignore case"
+    help: "大文字、小文字を区別せずにマッチングを行う"
 });
 parser.addArgument(["-m", "--multiline"], {
     action: "storeConst",
     constant: true,
     defaultValue: false,
-    help: "Enable multiline matching"
+    help: "複数行でのマッチングを行う"
 });
 parser.addArgument(["-n", "--normalize"], {
     action: "storeConst",
     constant: true,
     defaultValue: false,
-    help: "Normalize word and document before matching"
+    help: "マッチングを行う前に HTML ドキュメントと、検索対象の文字列を正規化する"
 });
 parser.addArgument(["-w", "--wait"], {
     action: "store",
     defaultValue: 0,
-    help: "Wait time before HTTP request"
+    help: "HTTP のリクエストを送る間隔（ミリ秒）"
 });
 parser.addArgument(["-d", "--depth"], {
     action: "store",
     defaultValue: 0,
-    help: "Max depth of documents"
+    help: "リンクを辿る最大のステップ数"
 });
 parser.addArgument(["-a", "--allow-domain"], {
     action: "append",
     defaultValue: [],
-    help: "Domain list of allow accessing"
+    help: "リクエストを許可するドメイン（複数指定可能）"
 });
-parser.addArgument("url", {help: "Base URL"});
-parser.addArgument("word", {help: "Search word"});
+parser.addArgument("url", {help: "検索を開始する URL"});
+parser.addArgument("word", {help: "検索対象の文字列"});
 const config = parser.parseArgs();
 
 
@@ -73,13 +73,13 @@ const config = parser.parseArgs();
     });
 
     if (result) {
-        console.log(`Steps: ${result.step}`);
-        console.log("Path:");
+        console.log(`ステップ: ${result.step}`);
+        console.log("経路:");
         result.stack.forEach((path: string, index: number) => {
             console.log(`\t${index + 1}: ${path}`);
         });
     } else {
-        console.error("Not found");
+        console.error("指定された文字列が見つかりませんでした。");
         process.exit(100);
     }
 })();
@@ -93,4 +93,3 @@ const config = parser.parseArgs();
  * c-hanging-comment-ender-p: nil
  * End:
  */
-
