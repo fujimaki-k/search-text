@@ -13,8 +13,8 @@
     "scripts": {
         "build": "tsc --lib dom,es2016 ./index.ts",
         "build:dev": "tsc",
-        "cobertura": "istanbul cover --report cobertura _mocha ./test",
-        "coverage": "istanbul cover --report html _mocha ./test",
+        "cobertura": "npm run build:dev && istanbul cover --report cobertura _mocha ./test",
+        "coverage": "npm run build:dev && istanbul cover --report html _mocha ./test",
         "help": "npm run build && node index.js --help",
         "postinstall": "npm run build",
         "search": "npm run build && node index.js --",
