@@ -37,7 +37,7 @@ after(() => {
 
 
 // Test
-describe("test", () => {
+describe("search-text", () => {
     describe("Client", () => {
         it("Should get response", async () => {
             const client = new Client();
@@ -69,6 +69,17 @@ describe("test", () => {
             expect(document.getLinks()).to.eql(["./muse.html", "./aqours.html"]);
         });
 
+        it("Should get links with base URL", async () => {
+            const client = new Client();
+            const response = await client.get(base_url);
+            const document = new Document(response.text);
+
+            expect(document.getLinks(base_url)).to.eql([
+                `${base_url}/muse.html`,
+                `${base_url}/aqours.html`
+            ]);
+        });
+
         it("Should not get links", async () => {
             const client = new Client();
             const response = await client.get(`${base_url}/empty.html`);
@@ -79,11 +90,96 @@ describe("test", () => {
     });
 
     describe("search", () => {
-        it("Should find data", async () => {
-            const search = new Search();
-            const result = await search.search(base_url, "printemps");
+        describe("Should find string", () => {
+            it("Default", async () => {
+                const search = new Search(base_url);
+                const result = await search.search("Printemps");
 
-            console.log(result);
+                expect(result.url).to.be(`${base_url}/honoka.html`);
+                expect(result.step).to.be(3);
+                expect(result.stack).to.eql([
+                    `${base_url}`,
+                    `${base_url}/muse.html`,
+                    `${base_url}/honoka.html`
+                ]);
+            });
+
+            it("Ignore case", async () => {
+                const search = new Search(base_url);
+                const result = await search.search("printemps", {
+                    ignoreCase: true
+                });
+
+                expect(result.url).to.be(`${base_url}/honoka.html`);
+                expect(result.step).to.be(3);
+                expect(result.stack).to.eql([
+                    `${base_url}`,
+                    `${base_url}/muse.html`,
+                    `${base_url}/honoka.html`
+                ]);
+            });
+
+            it("Normalize search words", async () => {
+                const search = new Search(base_url, {
+                    normalize: true
+                });
+                const result = await search.search("Ｈｏｎｏｋａ");
+
+                expect(result.url).to.be(`${base_url}/muse.html`);
+                expect(result.step).to.be(2);
+                expect(result.stack).to.eql([
+                    `${base_url}`,
+                    `${base_url}/muse.html`
+                ]);
+            });
+
+            it("Normalize document", async () => {
+                const search = new Search(`${base_url}/unnormalized.html`, {
+                    normalize: true
+                });
+                const result = await search.search("Printemps");
+
+                expect(result.url).to.be(`${base_url}/unnormalized.html`);
+                expect(result.step).to.be(1);
+                expect(result.stack).to.eql([`${base_url}/unnormalized.html`]);
+            });
+        });
+
+        describe("Should not find string", async () => {
+            it("Not matched", async () => {
+                const search = new Search(base_url);
+                const result = await search.search("printemps");
+
+                expect(result).to.be(null);
+            });
+
+            it("Max depth exceeded", async () => {
+                const search = new Search(base_url, {
+                    depth: 2
+                });
+                const result = await search.search("Printemps");
+
+                expect(result).to.be(null);
+            });
+
+            it("Not allowed domain", async() => {
+                const search = new Search(base_url, {
+                    domains: [
+                        "otonokizaka.ac.jp",
+                        "www.otonokizaka.ac.jp"
+                    ]
+                });
+                const result = await search.search("Printemps");
+
+                expect(result).to.be(null);
+            });
+
+            it("Unnormalized document", async () => {
+                const search = new Search(`${base_url}/unnormalized.html`);
+                const result = await search.search("Printemps");
+
+                expect(result).to.be(null);
+            });
         });
     });
 });

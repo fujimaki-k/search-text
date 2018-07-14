@@ -9,38 +9,115 @@ import URL = require("url");
 import Client from "./client";
 import Document from "./document";
 import Queue from "./queue";
+import {MatchingOptions} from "./document";
+
+const rewritePattern = require("regexpu-core");
 
 
+// Variables
+const others = new RegExp(rewritePattern("\\p{C}", "iu", {unicodePropertyEscape: true}), "g");
+
+
+// Declaration
+declare interface Options {
+    depth?: number;
+    domains?: Array<string>;
+    normalize?: boolean;
+    wait?: number;
+}
 
 declare interface Message {
     url: string;
-    stack: Array<string>
+    step: number;
+    stack: Array<string>;
 }
 
 
 class Search {
     public queue: Queue;
     public map: {[index: string]: boolean} = {};
+    public domains: {[index: string]: boolean} = {};
+    public url: string;
+    public options: Options = {};
 
     /**
      * constructor
      *
      * @constructs Search
      */
-    constructor() {
+    constructor(url: string, options?: Options) {
         this.queue = new Queue();
+        this.url = url;
+        this.options = options || {};
+        this.options.depth = this.options.depth || 0;
+        this.options.domains = this.options.domains || [];
+        this.domains = this.options.domains.reduce((collection: {[index: string]: boolean}, value: string) => {
+            collection[value] = true;
+
+            return collection;
+        }, {});
     }
 
-    async search(url: string, word: string): Promise<any> {
+    /**
+     * Normalize string
+     *
+     * @param   {string} string
+     * @param   {string} [form="NFKC"]
+     * @returns {string}
+     */
+    private normalize(string: string, form="NFKC"): string {
+        const lines = string.split(/\r\n|\r|\n/).map(function (line) {
+            return line.replace(others, "");
+        });
+
+        return lines.join("\n").normalize(form);
+    }
+
+    /**
+     * Sleep
+     *
+     * @param {number} milliseconds
+     * @returns {Promise}
+     */
+    private sleep(milliseconds: number): Promise<void> {
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                resolve();
+            }, milliseconds);
+        });
+    }
+
+    /**
+     * Search word in the web
+     *
+     * @param {string} word
+     * @param {MatchingOptions} [options]
+     * @returns {Promise}
+     */
+    async search(word: string, options?: MatchingOptions): Promise<Message|null> {
+        const target = (this.options.normalize) ? this.normalize(word) : word;
         this.queue.push({
-            url: url,
-            stack: []
-        } as Message);
+            url: this.url,
+            step: 1,
+            stack: [this.url]
+        });
 
         while(this.queue.length) {
-            const message: Message = this.queue.shift();
+            const message = this.queue.shift();
+            const url = new URL.URL(message.url);
             if (message.url in this.map) {
                 continue;
+            }
+            if (this.options.depth > 0 && message.step > this.options.depth) {
+                continue;
+            }
+            if (url.protocol === "javascript:") {
+                continue;
+            }
+            if (this.options.domains.length) {
+                if (!this.domains[url.hostname]) {
+                    continue;
+                }
             }
 
             let response;
@@ -49,30 +126,33 @@ class Search {
                 response = await client.get(message.url);
             } catch (error) {
                 continue;
+            } finally {
+                this.map[message.url] = true;
             }
-            this.map[message.url] = true;
 
-            const document = new Document(response.text);
-            if (document.hasString(word)) {
+            const text = (this.options.normalize) ? this.normalize(response.text) : response.text;
+            const document = new Document(text);
+            if (document.hasString(target, options)) {
                 return Promise.resolve(message);
             }
 
-            const links =  document.getLinks();
-            if (links.length) {
-                this.queue.push.apply(this.queue, links.map((link: string) => {
-                    const address = URL.format(new URL.URL(link, message.url));
-                    const stack = message.stack.slice();
-                    stack.push(address);
+            const links =  document.getLinks(message.url);
+            links.forEach((link: string) => {
+                const stack = message.stack.slice();
+                stack.push(link);
+                this.queue.push({
+                    url: link,
+                    step: message.step + 1,
+                    stack: stack
+                });
+            });
 
-                    return {
-                        url: address,
-                        stack: stack
-                    } as Message;
-                }));
+            if (this.options.wait > 0) {
+                await this.sleep(this.options.wait);
             }
         }
 
-        return Promise.resolve();
+        return Promise.resolve(null);
     }
 }
 
@@ -89,4 +169,3 @@ export default Search;
  * c-hanging-comment-ender-p: nil
  * End:
  */
-
