@@ -4,7 +4,9 @@
 'use strict';
 
 
+
 // 必要なモジュールのインポート
+import Events = require("events");
 import URL = require("url");
 import Client from "./client";
 import Document from "./document";
@@ -28,6 +30,7 @@ const others = new RegExp(rewritePattern("\\p{C}", "iu", {unicodePropertyEscape:
  * @property {number} [wait]
  */
 declare interface Options {
+    connections?: number;
     depth?: number;
     domains?: Array<string>;
     normalize?: boolean;
@@ -43,10 +46,12 @@ declare interface Options {
  * @property {Array.<string>} stack
  */
 declare interface Message {
+    type?: string;
     url: string;
     step: number;
     stack: Array<string>;
 }
+
 
 /**
  * 検索を実行するクラス
@@ -94,6 +99,15 @@ class Search {
      */
     public options: Options = {};
 
+
+    /**
+     * 現在のコネクション数
+     *
+     * @type {number}
+     */
+    public connections: number = 0;
+
+
     /**
      * コンストラクタ
      *
@@ -104,8 +118,10 @@ class Search {
     constructor(url: string, options?: Options) {
         this.url = url;
         this.options = options || {};
+        this.options.connections = this.options.connections || 1;
         this.options.depth = this.options.depth || 0;
         this.options.domains = this.options.domains || [];
+        // 配列を検索すると遅いので、オブジェクトに変換しておく
         this.domains = this.options.domains.reduce((collection: {[index: string]: boolean}, value: string) => {
             collection[value] = true;
 
@@ -146,12 +162,13 @@ class Search {
     /**
      * ウェブサイトを開き、指定された文字列が含まれるかを確認する
      * 文字列が見つからなかった場合には、リンクを辿って検索を継続する
+     * イベントで処理を並列化して、高速化を図ったバージョン
      *
      * @param {string} word                  検索対象の文字列
      * @param {MatchingOptions} [options]    マッチングを行う際のオプション
      * @returns {Promise<Message|null>}
      */
-    async search(word: string, options?: MatchingOptions): Promise<Message|null> {
+    search(word: string, options?: MatchingOptions): Promise<Message|null> {
         const target = (this.options.normalize) ? this.normalize(word) : word;
         this.queue.push({
             url: this.url,
@@ -159,71 +176,116 @@ class Search {
             stack: [this.url]
         });
 
-        // 最短経路が必要なので、幅優先探索を行う
-        while(this.queue.length) {
-            const message = this.queue.shift();
-            const url = new URL.URL(message.url);
+        return new Promise((resolve) => {
+            const event = new Events.EventEmitter();
+            let complete = false;  // 検索が完了したかどうかのフラグ
 
-            // すでに検索したパスはスキップする
-            if (message.url in this.map) {
-                continue;
-            }
-            // JavaScript が指定されているリンクはスキップする
-            if (url.protocol === "javascript:") {
-                continue;
-            }
-            // 許可されたドメイン以外へのアクセスはスキップする
-            if (this.options.domains.length) {
-                if (!this.domains[url.hostname]) {
-                    continue;
+            // 文字列が見つからず、次の URL を処理する際に発生するイベント
+            event.on("next", () => {
+                // キューが空になり、処理も完了していれば終了する
+                if (!this.queue.length && this.connections < 1) {
+                    return event.emit("complete", null);
                 }
-            }
-            // 指定された深さ以上になったら終了する
-            if (this.options.depth > 0 && message.step > this.options.depth) {
-                break;
-            }
 
-            // URL を開いて内容を取得する
-            let response;
-            const client = new Client();
-            try {
-                response = await client.get(message.url);
-            } catch (error) {
-                continue;
-            } finally {
-                // 検索済みの URL を記録する
-                // エラーになって continue が呼ばれても、finally は実行される
-                this.map[message.url] = true;
-            }
+                // 検索が完了していなければ継続する
+                if (!complete) {
+                    // 指定された最大コネクション数だけ同時に処理を実行する
+                    while(this.queue.length && this.options.connections > this.connections) {
+                        this.execute(event, target, options);
+                    }
+                }
+            });
 
-            // 検索対象の文字列が存在すれば結果を返す
-            const text = (this.options.normalize) ? this.normalize(response.text) : response.text;
-            const document = new Document(text);
-            if (document.hasString(target, options)) {
-                return Promise.resolve(message);
-            }
+            // 検索が完了した場合に発生するイベント
+            event.on("complete", (result) => {
+                complete = true;  // 処理が継続されないようにフラグを立てる
+                this.queue = [];
 
-            // 検索対象の文字列が見つからなければ、キューにリンク先の URL を登録する
-            const links =  document.getLinks(message.url);
-            links.push.apply(this.queue, links.map((link: string): Message => {
-                // JavaScript の配列は参照渡しされるため、コピーした配列に経路を保存する必要がある
-                const stack = message.stack.slice();
-                stack.push(link);
+                return resolve(result || null);
+            });
 
-                return {
-                    url: link,
-                    step: message.step + 1,
-                    stack: stack
-                };
-            }));
+            // エントリーポイントにアクセスして処理を開始する
+            event.emit("next");
+        });
+    }
 
-            // ウェイトが指定されていれば、指定された時間だけ待つ
-            if (this.options.wait > 0) {
-                await this.sleep(this.options.wait);
-            }
+    /**
+     * キューに登録された URL を開いて、文字列を検索した結果を返す
+     * 指定された URL に文字列がない場合は、そこからリンクをたどり、さらに検索を行う
+     *
+     * @param {Event} event
+     * @param {string} word
+     * @param {MatchingOptions} options
+     * @returns {Promise<boolean>}
+     */
+    private async execute(event: Events, word: string, options?: MatchingOptions) {
+        // 最短経路が欲しいので、幅優先探索を行う
+        const message = this.queue.shift();
+        const url = new URL.URL(message.url);
+        this.connections = this.connections + 1;
+
+        let next = false;
+        if (this.options.domains.length) {
+            next = !(url.hostname in this.domains);       // 許可されたドメイン以外へのアクセスはスキップする
+        }
+        next = next || (message.url in this.map);          // 既に検索したパスはスキップする
+        next = next || (url.protocol === "javascript:");  // JavaScript が指定されているリンクはスキップする
+        if (next) {
+            this.connections = this.connections - 1;
+
+            return event.emit("next");
         }
 
-        return Promise.resolve(null);
+        // 指定された深さ以上になら終了する
+        if (this.options.depth > 0 && message.step > this.options.depth) {
+            this.connections = this.connections - 1;
+
+            return event.emit("complete", null);
+        }
+
+        // URL を開いて内容を取得する
+        let response;
+        const client = new Client();
+        try {
+            this.map[message.url] = true;
+            response = await client.get(message.url);
+        } catch (error) {
+            this.connections = this.connections - 1;
+
+            return event.emit("next");
+        }
+
+        // 検索対象の文字列が存在すれば結果を返す
+        const text = (this.options.normalize) ? this.normalize(response.text) : response.text;
+        const document = new Document(text);
+        if (document.hasString(word, options)) {
+            this.connections = this.connections - 1;
+
+            return event.emit("complete", message);
+        }
+
+        // 検索対象の文字列が見つからなければ、キューにリンク先の URL を登録する
+        const links =  document.getLinks(message.url);
+        links.push.apply(this.queue, links.map((link: string): Message => {
+            // JavaScript の配列は参照渡しされるため、配列をコピーして経路を保存する必要がある
+            const stack = message.stack.slice();
+            stack.push(link);
+
+            return {
+                url: link,
+                step: message.step + 1,
+                stack: stack
+            };
+        }));
+
+        // ウェイトが指定されていれば、指定された時間だけ待つ
+        if (this.options.wait > 0) {
+            await this.sleep(this.options.wait);
+        }
+
+        this.connections = this.connections - 1;
+
+        return event.emit("next");
     }
 }
 

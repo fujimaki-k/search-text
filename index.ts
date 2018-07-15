@@ -38,6 +38,11 @@ parser.addArgument(["-n", "--normalize"], {
     defaultValue: false,
     help: "マッチングを行う前に HTML ドキュメントと、検索対象の文字列を正規化する"
 });
+parser.addArgument(["-c", "--connections"], {
+    action: "store",
+    defaultValue: 1,
+    help: "最大コネクション数（デフォルト：1）"
+});
 parser.addArgument(["-w", "--wait"], {
     action: "store",
     defaultValue: 0,
@@ -61,6 +66,7 @@ const config = parser.parseArgs();
 // Execute
 (async () => {
     const search = new Search(config.url, {
+        connections: config.connections,
         depth: config.depth,
         domains: config.domains,
         normalize: config.normalize,
