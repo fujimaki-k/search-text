@@ -79,10 +79,8 @@ const config = parser.parseArgs();
     });
 
     if (result) {
-        console.log(`ステップ: ${result.step}`);
-        console.log("経路:");
         result.stack.forEach((path: string, index: number) => {
-            console.log(`\t${index + 1}: ${path}`);
+            console.log(`${index + 1}: ${path}`);
         });
     } else {
         console.error("指定された文字列が見つかりませんでした。");
