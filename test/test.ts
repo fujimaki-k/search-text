@@ -59,25 +59,28 @@ describe("search-text", () => {
     });
 
     describe("Document", () => {
-        it("Should get document", async () => {
+        it("Should include string", async () => {
             const client = new Client();
             const response = await client.get(base_url);
             const document = new Document(response.text);
 
             expect(document.hasString("μ's")).to.be(true);
-            expect(document.hasString("Printemps")).to.be(false);
-            expect(document.getLinks()).to.eql(["./muse.html", "./aqours.html"]);
         });
 
-        it("Should get links with base URL", async () => {
+        it("Should not include string", async () => {
             const client = new Client();
             const response = await client.get(base_url);
             const document = new Document(response.text);
 
-            expect(document.getLinks(base_url)).to.eql([
-                `${base_url}/muse.html`,
-                `${base_url}/aqours.html`
-            ]);
+            expect(document.hasString("Printemps")).to.be(false);
+        });
+
+        it("Should get links", async () => {
+            const client = new Client();
+            const response = await client.get(base_url);
+            const document = new Document(response.text);
+
+            expect(document.getLinks()).to.eql(["./muse.html", "./aqours.html"]);
         });
 
         it("Should not get links", async () => {
@@ -96,7 +99,7 @@ describe("search-text", () => {
                 const result = await search.search("Printemps");
 
                 expect(result.url).to.be(`${base_url}/honoka.html`);
-                expect(result.step).to.be(3);
+                expect(result.depth).to.be(3);
                 expect(result.stack).to.eql([
                     `${base_url}`,
                     `${base_url}/muse.html`,
@@ -111,7 +114,7 @@ describe("search-text", () => {
                 });
 
                 expect(result.url).to.be(`${base_url}/honoka.html`);
-                expect(result.step).to.be(3);
+                expect(result.depth).to.be(3);
                 expect(result.stack).to.eql([
                     `${base_url}`,
                     `${base_url}/muse.html`,
@@ -126,7 +129,7 @@ describe("search-text", () => {
                 const result = await search.search("Ｈｏｎｏｋａ");
 
                 expect(result.url).to.be(`${base_url}/muse.html`);
-                expect(result.step).to.be(2);
+                expect(result.depth).to.be(2);
                 expect(result.stack).to.eql([
                     `${base_url}`,
                     `${base_url}/muse.html`
@@ -140,7 +143,7 @@ describe("search-text", () => {
                 const result = await search.search("Printemps");
 
                 expect(result.url).to.be(`${base_url}/unnormalized.html`);
-                expect(result.step).to.be(1);
+                expect(result.depth).to.be(1);
                 expect(result.stack).to.eql([`${base_url}/unnormalized.html`]);
             });
         });

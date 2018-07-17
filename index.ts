@@ -80,7 +80,7 @@ const config = parser.parseArgs();
 
     if (result) {
         result.stack.forEach((path: string, index: number) => {
-            console.log(`${index + 1}: ${path}`);
+            console.log(`${index + 1}: ${decodeURI(path)}`);
         });
     } else {
         console.error("指定された文字列が見つかりませんでした。");

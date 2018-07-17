@@ -83,10 +83,11 @@ class Client {
     }
 
     /**
-     * GET でのリクエストを行い、結果を取得する
+     * GET リクエストを行い、結果を取得する
      *
      * @param {string} url           リクエストを行う URL
      * @param {Object} parameters    追加のパラメーター
+     * @returns {Promise<*>}
      */
     get(url: string, parameters: {[index: string]: any}={}): Promise<any> {
         // URL にパラメーターを追加する

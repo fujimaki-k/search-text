@@ -5,7 +5,6 @@
 
 
 // 必要なモジュールのインポート
-import URL = require("url");
 import Cheerio = require("cheerio");
 
 
@@ -71,33 +70,14 @@ class Document {
     }
 
     /**
-     * HTML ドキュメントに含まれる文字列を取得する
+     * HTML ドキュメントに含まれるリンクを取得する
      *
-     * @param    {string} [base_url]    相対 URL を解釈するさいのベース URL
-     * @returns {Array}
+     * @returns {Array.<string>}
      */
-    getLinks(base_url?: string): any {
-        const links = this.document("a").map(function () {
+    getLinks(): Array<string> {
+        return this.document("a").map(function () {
             return Cheerio(this).attr("href");
-        }).get();
-
-        // 重複している URL を削除する
-        const result = links.reduce((collection: {[index: string]: number}, link: string) => {
-            // base_url が指定されている場合は、ハッシュ（ページ内リンク）を削除する
-            // 相対 URL では URL パーサーが使えないため、この処理は行わない
-            if (base_url) {
-                const url = new URL.URL(link, base_url);
-                url.hash = "";
-                collection[URL.format(url)] = 1;
-
-                return collection;
-            }
-            collection[link] = 1;
-
-            return collection;
-        }, {});
-
-        return Object.keys(result);
+        }).get() || [];
     }
 }
 

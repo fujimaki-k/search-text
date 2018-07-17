@@ -42,13 +42,12 @@ declare interface Options {
  *
  * @typedef {Object} Message
  * @property {string} url
- * @property {number} step
+ * @property {number} depth
  * @property {Array.<string>} stack
  */
 declare interface Message {
-    type?: string;
     url: string;
-    step: number;
+    depth: number;
     stack: Array<string>;
 }
 
@@ -146,7 +145,7 @@ class Search {
     }
 
     /**
-     * 指定したミリ秒の間処理を一時停止する
+     * 指定したミリ秒の間、処理を一時停止する
      *
      * @param {number} milliseconds    停止する時間をミリ秒で指定する
      * @returns {Promise}
@@ -162,7 +161,6 @@ class Search {
     /**
      * ウェブサイトを開き、指定された文字列が含まれるかを確認する
      * 文字列が見つからなかった場合には、リンクを辿って検索を継続する
-     * イベントで処理を並列化して、高速化を図ったバージョン
      *
      * @param {string} word                  検索対象の文字列
      * @param {MatchingOptions} [options]    マッチングを行う際のオプション
@@ -172,7 +170,7 @@ class Search {
         const target = (this.options.normalize) ? this.normalize(word) : word;
         this.queue.push({
             url: this.url,
-            step: 1,
+            depth: 1,
             stack: [this.url]
         });
 
@@ -218,7 +216,7 @@ class Search {
      * @param {MatchingOptions} options
      * @returns {Promise<boolean>}
      */
-    private async execute(event: Events, word: string, options?: MatchingOptions) {
+    private async execute(event: Events, word: string, options?: MatchingOptions): Promise<boolean> {
         // 最短経路が欲しいので、幅優先探索を行う
         const message = this.queue.shift();
         const url = new URL.URL(message.url);
@@ -237,7 +235,7 @@ class Search {
         }
 
         // 指定された深さ以上になら終了する
-        if (this.options.depth > 0 && message.step > this.options.depth) {
+        if (this.options.depth > 0 && message.depth > this.options.depth) {
             this.connections = this.connections - 1;
 
             return event.emit("complete", null);
@@ -264,16 +262,24 @@ class Search {
             return event.emit("complete", message);
         }
 
-        // 検索対象の文字列が見つからなければ、キューにリンク先の URL を登録する
-        const links =  document.getLinks(message.url);
-        links.push.apply(this.queue, links.map((link: string): Message => {
+        // リンクされている URL を取得し、重複しているものを削除する
+        const links = document.getLinks().reduce((collection: {[index: string]: boolean}, link: string) => {
+            const url = new URL.URL(link, message.url);
+            url.hash = "";
+            collection[URL.format(url)] = true;
+
+            return collection;
+        }, {});
+
+        // リンクをキューに追加する
+        this.queue.push.apply(this.queue, Object.keys(links).map((link: string): Message => {
             // JavaScript の配列は参照渡しされるため、配列をコピーして経路を保存する必要がある
             const stack = message.stack.slice();
             stack.push(link);
 
             return {
                 url: link,
-                step: message.step + 1,
+                depth: message.depth + 1,
                 stack: stack
             };
         }));
